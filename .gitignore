@@ -1,0 +1,16 @@
+# Секреты
+.env
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Системные
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# База данных (задел на будущее — если появится память диалога)
+*.db
