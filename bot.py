@@ -26,6 +26,12 @@ async def on_start(message: Message) -> None:
     await message.answer(WELCOME)
 
 
+async def on_stranger(message: Message) -> None:
+    # сюда попадают все, кто НЕ хозяин: личный бот вежливо отказывает.
+    # Важно: тут НЕТ обращения к LLM — чужой человек не жжёт баланс OpenRouter.
+    await message.answer("Это личный бот — он общается только со своим хозяином 🙂")
+
+
 def make_free_text_handler(system_prompt: str):
     # фабрика обработчика: замыкаем системный промпт, чтобы не читать файл
     # на каждое сообщение (он загружается один раз при старте).
@@ -75,13 +81,29 @@ async def main() -> None:
             "Создай бота у @BotFather и впиши токен в файл .env."
         )
 
+    # ADMIN_ID — Telegram-ID хозяина. Бот личный: отвечает только ему,
+    # всех остальных перехватывает on_stranger (без обращения к LLM).
+    admin_id_raw = os.getenv("ADMIN_ID")
+    if not admin_id_raw:
+        raise SystemExit(
+            "Не найден ADMIN_ID в .env. "
+            "Впиши свой Telegram-ID (число) в файл .env, чтобы бот отвечал только тебе."
+        )
+    admin_id = int(admin_id_raw)
+
     system_prompt = load_system_prompt()
 
     bot = Bot(token=token)
     dp = Dispatcher()
 
-    dp.message.register(on_start, CommandStart())
-    dp.message.register(make_free_text_handler(system_prompt), F.text)
+    # Сначала — обработчики хозяина (фильтр «только от admin_id»).
+    dp.message.register(on_start, CommandStart(), F.from_user.id == admin_id)
+    dp.message.register(
+        make_free_text_handler(system_prompt), F.text, F.from_user.id == admin_id
+    )
+    # Последним — перехват всех чужих. Регистрируется в конце: aiogram берёт
+    # первый подошедший обработчик, поэтому хозяин уходит выше, чужие — сюда.
+    dp.message.register(on_stranger)
 
     logging.info("Смешарик запущен. Жду сообщений…")
     await dp.start_polling(bot)
