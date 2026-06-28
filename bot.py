@@ -132,7 +132,7 @@ async def main() -> None:
     # первый подошедший обработчик, поэтому хозяин уходит выше, чужие — сюда.
     dp.message.register(on_stranger)
 
-    tz = ZoneInfo(os.getenv("TIMEZONE", "Europe/Moscow"))
+    tz = ZoneInfo(os.getenv("TIMEZONE", "Europe/Amsterdam"))
     scheduler = AsyncIOScheduler(timezone=tz)
     scheduler.add_job(
         send_morning_greeting,
