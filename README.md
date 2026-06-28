@@ -28,3 +28,5 @@
 ## Модель
 Модель задаётся одной строкой `MODEL` в `llm.py`. Каталог моделей —
 [openrouter.ai/models](https://openrouter.ai/models).
+
+<!-- autodeploy test -->
