@@ -6,16 +6,27 @@ from __future__ import annotations
 # Никаких FSM, меню и базы — весь «характер» живёт в системном промпте.
 
 import asyncio
+import datetime
 import logging
 import os
 import sys
+from zoneinfo import ZoneInfo
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart
 from aiogram.types import Message
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
 
 from llm import LLMError, LLMRateLimitError, ask_openrouter, load_system_prompt
+
+
+_MONTHS_RU = {
+    1: "января", 2: "февраля", 3: "марта", 4: "апреля",
+    5: "мая", 6: "июня", 7: "июля", 8: "августа",
+    9: "сентября", 10: "октября", 11: "ноября", 12: "декабря",
+}
+_WEEKDAYS_RU = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
 
 
 # Приветствие при /start — короткое и тёплое.
@@ -64,6 +75,22 @@ def make_free_text_handler(system_prompt: str):
     return on_free_text
 
 
+async def send_morning_greeting(bot: Bot, admin_id: int, system_prompt: str) -> None:
+    today = datetime.date.today()
+    day = _WEEKDAYS_RU[today.weekday()]
+    date_str = f"{today.day} {_MONTHS_RU[today.month]} {today.year}"
+    prompt = (
+        f"Сегодня {day}, {date_str}. Пришли мне тёплое утреннее приветствие с шуткой. "
+        "Если на эту дату приходится известный праздник, историческая годовщина или "
+        "интересное событие — упомяни его к месту."
+    )
+    try:
+        text = await ask_openrouter(prompt, system_prompt)
+        await bot.send_message(admin_id, text, parse_mode="HTML")
+    except Exception:
+        logging.exception("Ошибка отправки утреннего приветствия")
+
+
 async def main() -> None:
     # фикс кириллицы в print/логах на Windows-консоли (cp1252 → UTF-8)
     try:
@@ -105,8 +132,23 @@ async def main() -> None:
     # первый подошедший обработчик, поэтому хозяин уходит выше, чужие — сюда.
     dp.message.register(on_stranger)
 
+    tz = ZoneInfo(os.getenv("TIMEZONE", "Europe/Moscow"))
+    scheduler = AsyncIOScheduler(timezone=tz)
+    scheduler.add_job(
+        send_morning_greeting,
+        "cron",
+        hour=9,
+        minute=0,
+        args=[bot, admin_id, system_prompt],
+    )
+    scheduler.start()
+    logging.info("Планировщик запущен (утреннее приветствие в 09:00 %s).", tz)
+
     logging.info("Смешарик запущен. Жду сообщений…")
-    await dp.start_polling(bot)
+    try:
+        await dp.start_polling(bot)
+    finally:
+        scheduler.shutdown()
 
 
 if __name__ == "__main__":
